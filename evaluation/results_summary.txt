@@ -1,0 +1,27 @@
+==========================================================================================
+EVALUATION RESULTS
+==========================================================================================
+
+Confusion Matrix:
+  True Positives (TP):    3  (anomalies correctly flagged)
+  False Negatives (FN):   0  (anomalies missed)
+  False Positives (FP):   0  (normal products incorrectly flagged)
+  True Negatives (TN):   51  (normal products correctly passed)
+
+Performance Metrics:
+  Precision:             100.0%  (TP / (TP + FP))
+  Recall:                100.0%  (TP / (TP + FN))
+  False Positive Rate:   0.0%  (FP / (FP + TN))
+
+==========================================================================================
+EXECUTIVE SUMMARY
+==========================================================================================
+
+Without Trust Layer: 54/54 listings would reach the AI buyer unfiltered.
+
+With Trust Layer: 3 listings blocked/flagged for review, 51 passed through clean.
+
+Correctly caught 3/3 planted anomalies (100% recall).
+Incorrectly flagged 0/51 normal listings (0.0% false positive rate).
+
+==========================================================================================
