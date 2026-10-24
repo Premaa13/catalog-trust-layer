@@ -9,3 +9,4 @@ node_modules/
 audit_log.csv
 *.log
 .DS_Store
+java-backend/target/

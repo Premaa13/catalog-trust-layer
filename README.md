@@ -1,127 +1,280 @@
-catalog-trust-layer
-=====================
+# Catalog Trust Layer
 
-AI shopping agents increasingly buy on behalf of users — but they have no reliable way to tell whether a product listing is trustworthy before completing a purchase. A price could have spiked unexpectedly, stock counts could be inconsistent with recent orders, or a listing could be stale and outdated. The **Catalog Trust Layer** sits between an AI buyer agent and a merchant catalog, scoring each listing for trust signals and blocking or flagging risky purchases before money moves — including live integration with Razorpay for test-mode checkout.
+### A Trust & Provenance Layer for AI Shopping Agents
 
-How It Works
--------------
-The trust engine (`engine/trust_engine.py`, `engine/trust_scoring.py`) evaluates each product listing against a set of checks:
+AI shopping agents increasingly purchase products on behalf of users, but they need a reliable way to determine whether a product listing is trustworthy before completing a purchase.
 
-- **Price velocity** — flags listings where price has changed abnormally fast between catalog snapshots
-- **Stock consistency** — flags listings where recent completed orders don't add up with reported stock
-- **Freshness** — flags listings that haven't been updated recently (stale data risk)
+**Catalog Trust Layer** sits between an AI shopping agent and a merchant catalog, evaluating product listings for suspicious price changes, stock inconsistencies, and stale information. It assigns trust scores and determines whether a product can proceed to purchase, requires caution, or should be reviewed or blocked.
 
-Each listing receives a trust score and one of four actions (see Dashboard section below for the full color legend). Every verification is written to an audit log (`audit/audit_log.py`) for traceability.
+The project includes a Python implementation and a Java Spring Boot backend, with REST APIs, an AI shopping agent, an MCP server, and Razorpay test-mode order creation.
 
-Project Structure
-------------------
-    engine/       — trust scoring logic
-    agent/        — AI shopping agent (intent parsing, purchase flow)
-    payment/      — Razorpay test-mode integration
-    shop/         — demo storefront (FastAPI + static HTML)
-    dashboard/    — real-time trust analysis dashboard
-    mcp_tool/     — MCP tool wrapper for listing verification
-    data/         — synthetic dataset generator
-    audit/        — audit logging + viewer
-    evaluation/   — evaluation scripts and results
+## Key Features
 
-Environment Setup
-------------------
-Copy `.env.example` to `.env` and add your Razorpay **test-mode** API keys:
+* **Trust Scoring Engine** — Evaluates price changes, stock consistency, and listing freshness.
+* **Four Trust Actions** — ALLOW, ALLOW_WITH_WARNING, REVIEW, and BLOCK.
+* **Batch Evaluation** — Processes catalog data and generates `results.csv`.
+* **REST APIs** — Provides catalog information, trust results, audit logs, and shopping-agent functionality.
+* **AI Shopping Agent** — Parses shopping requests, matches products, and recommends products based on trust results.
+* **MCP Server** — Exposes the `verify_listing_trust` tool through the Model Context Protocol.
+* **Razorpay Integration** — Creates test-mode orders only after trust verification.
+* **Audit Logging** — Records purchase verification decisions.
+* **Python and Java Implementations** — Preserves the original Python project alongside the Java backend.
 
-    RAZORPAY_KEY_ID=your_test_key_here
-    RAZORPAY_KEY_SECRET=your_test_secret_here
+## Technology Stack
 
-Get test keys from your Razorpay Dashboard → **Settings → API Keys**. Never commit `.env` — it's already excluded via `.gitignore`.
+**Java Backend**
 
-This project generates a synthetic dataset for testing a Catalog Trust Layer. It outputs two CSV files:
+* Java 17
+* Spring Boot 3.4.5
+* Maven
+* Spring Web / REST APIs
+* Java MCP SDK
+* Razorpay API
+* CSV-based data storage
 
-- data/catalog.csv — product catalog snapshots (product_id, product_name, price, stock, last_updated)
-- data/orders.csv — orders (order_id, product_id, quantity, timestamp, status)
+**Original Python Implementation**
 
-The dataset includes:
-- 50 normal/random products
-- 4 planted test products (TEST-A, TEST-B, TEST-C, TEST-D)
+* Python
+* FastAPI
+* CSV-based trust evaluation
+* Razorpay integration
+* MCP tool wrapper
 
-Planted test cases
-------------------
-1. TEST-A — Price Spike Test
-   - product_id: TEST-A
-   - Two catalog snapshots 2 hours apart
-   - New snapshot price is exactly 70% higher than the old snapshot
-   - Designed to exercise price velocity checks
+## How It Works
 
-2. TEST-B — Stock Mismatch Test
-   - product_id: TEST-B
-   - Catalog stock is exactly 50
-   - Completed orders in the last 2 hours total exactly 65 units (multiple orders)
-   - Designed to exercise stock consistency checks
+The trust engine evaluates catalog listings using three main checks.
 
-3. TEST-C — Stale Listing Test
-   - product_id: TEST-C
-   - last_updated is exactly 5 days before dataset generation
-   - Designed to exercise freshness checks
+### 1. Price Velocity
 
-4. TEST-D — Normal Control
-   - product_id: TEST-D
-   - Ordinary product; should pass all trust checks
+Detects suspicious price changes between catalog snapshots. Large price increases can reduce a product's trust score.
 
-Notes
------
-- Timestamps are stored in ISO 8601 format (UTC-aware).
-- The script uses a fixed random seed for reproducibility.
-- Faker is supported for product names if installed; otherwise a built-in list of realistic product names is used.
-- This dataset is synthetic and intended for testing and development only.
+### 2. Stock Consistency
 
-Dependencies
-------------
-The project uses the Python package `faker` optionally. Install with:
+Compares recent completed order quantities with the merchant's claimed stock to identify potential inconsistencies.
 
-    pip install -r requirements.txt
+### 3. Listing Freshness
 
-(If Faker is not installed, the script will still run using a fallback list of product names.)
+Evaluates how recently a listing was updated. Stale listings can receive penalties or be forced into manual review.
 
-Usage
------
-Run the generator script:
+Each product receives a trust score, verification status, recommended action, and explanation of relevant risk signals.
 
-    python data\generate_synthetic_data.py
+### Trust Actions
 
-This will create `data/catalog.csv` and `data/orders.csv` and print a summary and the output file paths.
+| Action                  | Meaning                           |
+| ----------------------- | --------------------------------- |
+| 🟢 `ALLOW`              | Listing passes the trust checks.  |
+| 🟡 `ALLOW_WITH_WARNING` | Listing may proceed with caution. |
+| 🟠 `REVIEW`             | Manual review is recommended.     |
+| 🔴 `BLOCK`              | Purchase should not proceed.      |
 
-Running the Dashboard
----------------------
-To launch the web dashboard for real-time trust analysis and audit logging:
+The purchase service rejects REVIEW and BLOCK products before contacting Razorpay.
 
-    uvicorn dashboard.app:app --reload --port 8000
+## Project Structure
 
-Then open your browser to **http://localhost:8000**
+```text
+catalog-trust-layer/
+├── engine/                 # Python trust-scoring engine
+├── agent/                  # Python shopping agent
+├── payment/                # Python Razorpay integration
+├── shop/                   # Python storefront
+├── dashboard/              # Python trust dashboard
+├── mcp_tool/               # Original Python MCP tool
+├── data/                   # Catalog, orders, and generated results
+├── audit/                  # Audit logging
+├── evaluation/             # Evaluation scripts and results
+├── java-backend/
+│   ├── src/main/java/      # Java Spring Boot application
+│   ├── src/test/java/      # Java automated tests
+│   ├── data/               # Backend data directory, if configured
+│   ├── pom.xml             # Maven configuration
+│   └── README.md           # Java backend documentation
+├── agent_demo.py
+├── agent_demo_no_trust_layer.py
+└── README.md
+```
 
-The dashboard displays:
-- **Products Trust Analysis**: All products with their trust scores, status, and action recommendations
-  - Green (ALLOW): Safe to transact
-  - Yellow (ALLOW_WITH_WARNING): Proceed with caution
-  - Orange (REVIEW): Manual review recommended
-  - Red (BLOCK): Do not transact
-  - Planted test cases (TEST-A, TEST-B, TEST-C, TEST-D) are highlighted with a special badge
-- **Verification Audit Log**: Complete history of all trust verifications run through the system
+## Java Backend Setup
 
-Running the Full Demo
-----------------------
-To simulate an AI shopping agent checking listing trust before completing a Razorpay test-mode purchase:
+### Prerequisites
 
-    python agent_demo.py
+* Java 17 or later
+* Maven 3.9 or later
+* Git
 
-This runs the end-to-end flow: the agent parses a purchase intent, the trust engine verifies the listing, and — if trusted — a Razorpay test-mode order is created via `payment/razorpay_client.py`.
+Verify your installation:
 
-To see the contrast without the trust layer (for comparison/evaluation purposes):
+```bash
+java -version
+mvn -version
+```
 
-    python agent_demo_no_trust_layer.py
+### Run the Java Backend
 
-Evaluation
-----------
-`evaluation/run_evaluation.py` runs the trust engine against the full synthetic dataset and produces a summary in `evaluation/results_summary.txt`.
+From the repository root:
 
-Disclaimer
-----------
-This project uses Razorpay **test-mode** keys only. No real payments are processed.
+```bash
+mvn -f java-backend/pom.xml spring-boot:run
+```
+
+The backend starts at:
+
+`http://localhost:8080`
+
+Keep the terminal running while using the application.
+
+### Run Tests
+
+```bash
+mvn -f java-backend/pom.xml test
+```
+
+The integration work completed during development reported **51 passing tests**, with zero failures or errors. Run the command above to verify the current repository state.
+
+### Available REST Endpoints
+
+| Method | Endpoint                    | Purpose                                      |
+| ------ | --------------------------- | -------------------------------------------- |
+| GET    | `/`                         | Dashboard page                               |
+| GET    | `/shop`                     | Storefront page                              |
+| GET    | `/api/products`             | List evaluated products                      |
+| GET    | `/api/shop/products`        | Storefront product listing                   |
+| GET    | `/api/products/{productId}` | Retrieve a product                           |
+| GET    | `/api/audit-log`            | Retrieve audit entries                       |
+| GET    | `/api/agent/run?query=...`  | Stream shopping-agent progress               |
+| GET    | `/api/agent/demo`           | Stream a deterministic agent demo            |
+| POST   | `/api/agent/shop`           | Submit a shopping goal                       |
+| POST   | `/api/buy`                  | Request trust-gated test-mode order creation |
+
+Product-specific responses and errors follow the implementation documented in the Java backend README.
+
+## MCP Integration
+
+The Java backend implements an MCP tool named:
+
+`verify_listing_trust`
+
+The tool allows compatible MCP clients to discover and invoke listing verification.
+
+It returns trust information for the requested product, including the score, status, action, and relevant reasons.
+
+Use the MCP SDK, transport, and client configuration documented in `java-backend/README.md`. Ensure the backend is running before connecting the client.
+
+The MCP tool does not bypass purchase verification or directly initiate payments.
+
+## Razorpay Test-Mode Configuration
+
+Razorpay credentials are required only when testing successful order creation against Razorpay's test API.
+
+Configure these environment variables using your **Razorpay test-mode credentials**:
+
+```text
+RAZORPAY_KEY_ID=your_test_key_id
+RAZORPAY_KEY_SECRET=your_test_key_secret
+```
+
+The key ID must use the test-mode prefix `rzp_test_`.
+
+Never commit credentials to GitHub. Keep `.env` files and secrets excluded through `.gitignore`.
+
+The purchase flow uses trust verification before order creation. No real payment should be initiated or captured by this test-mode integration.
+
+## Synthetic Dataset
+
+The original Python dataset generator creates:
+
+* `data/catalog.csv` — catalog snapshots containing product information, prices, stock, and timestamps.
+* `data/orders.csv` — order records containing product IDs, quantities, timestamps, and order statuses.
+
+The dataset includes normal products and planted test cases.
+
+Generate the synthetic dataset using the original Python implementation:
+
+```bash
+python data/generate_synthetic_data.py
+```
+
+**Important:** Regenerating the dataset changes the input data and may change trust scores and evaluation results.
+
+### Planted Test Cases
+
+| Product  | Scenario          | Purpose                                   |
+| -------- | ----------------- | ----------------------------------------- |
+| `TEST-A` | Price spike       | Tests abnormal price increases            |
+| `TEST-B` | Stock consistency | Tests claimed stock against recent orders |
+| `TEST-C` | Stale listing     | Tests freshness penalties                 |
+| `TEST-D` | Normal control    | Tests an ordinary listing                 |
+
+The dataset is synthetic and intended for development and testing.
+
+## Running the Original Python Implementation
+
+The Python implementation remains available separately.
+
+Install its dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the original dashboard:
+
+```bash
+uvicorn dashboard.app:app --reload --port 8000
+```
+
+Open:
+
+`http://localhost:8000`
+
+Run the original shopping-agent demo:
+
+```bash
+python agent_demo.py
+```
+
+Run the comparison demo without the trust layer:
+
+```bash
+python agent_demo_no_trust_layer.py
+```
+
+Run the evaluation script:
+
+```bash
+python evaluation/run_evaluation.py
+```
+
+Use the Python commands only when working with the original Python implementation. The Java backend has its own startup command.
+
+## Evaluation
+
+The project evaluates product listings against the synthetic dataset and generates trust decisions for individual products.
+
+During Java backend integration testing, the generated output for **70 distinct products** matched the Python reference results row by row.
+
+The reported summary was:
+
+| Result             |  Count |
+| ------------------ | -----: |
+| Verified — ALLOW   |     24 |
+| ALLOW_WITH_WARNING |      3 |
+| REVIEW             |     43 |
+| BLOCK              |      0 |
+| **Total products** | **70** |
+
+These figures describe the dataset used during that test run. Results can differ if the input data changes.
+
+## Security Considerations
+
+* Trust verification occurs before purchase-order creation.
+* REVIEW and BLOCK products cannot proceed through the purchase service.
+* Razorpay credentials are supplied through environment variables.
+* Automated payment tests use mocked provider calls.
+* The MCP tool verifies listing trust without directly initiating payments.
+* The dataset is synthetic and is not intended for production purchasing decisions.
+
+## Disclaimer
+
+Catalog Trust Layer is a research and development project for evaluating catalog trust and purchase safety.
+
+Razorpay integration is intended for **test mode only**. No real payments are processed by the intended demonstration workflow.
